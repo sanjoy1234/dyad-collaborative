@@ -1,0 +1,186 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Arial;}{\f1 Courier New;}}
+\viewkind4\uc1\pard\f0\fs22
+\b Dyad Migration Executive Summary\b0\par
+\b Date:\b0 November 6, 2025\par
+\par
+\b 0. Overview\b0\par
+Migration from \b dyad-main\b0 (Electron, single-user, local IPC + SQLite + filesystem) to \b dyad-collaborative\b0 (Next.js web, multi-tenant, REST/WebSocket, PostgreSQL + Redis + Docker volumes).\par
+Purpose: enable secure multi-user collaboration, cloud deployment, RBAC, centralized AI provider abstraction.\par
+High-level shifts: IPC -> REST/Socket.IO; Local FS/SQLite -> PostgreSQL + volume; implicit trust -> NextAuth JWT + roles; local models -> provider factory + encrypted keys; single-process -> containerized horizontal scaling.\par
+Original feature set continuity: AI Models, Chatting, Debugging, Previewing, Versioning, Importing, Mobile App, Security Review.\par
+\par
+\b Table of Contents\b0\par
+1. Framework Transformation\par
+2. Communication Architecture\par
+3. Database & Storage\par
+4. Authentication & RBAC\par
+5. AI Model Integration\par
+6. Collaboration & Real-Time Sync\par
+7. Preview Server & Container Management\par
+8. Versioning & File Management\par
+9. Import / Export Workflows\par
+10. Debugging & Observability\par
+11. Mobile & Responsive Design\par
+12. Build & Deployment\par
+13. Security Review (Critical)\par
+14. Class & Module Organization\par
+15. Configuration & Environment Management\par
+16. Trade-offs & Rationale Summary\par
+\par
+\b Section Format:\b0 Component / Area | Before | After | Changes Made | Rationale | Implementation Details | Links\par
+\par
+\b 1. Framework Transformation\b0\par
+Component / Area: Core runtime\par
+Before: Electron + Vite + React; main process handlers (registerIpcHandlers, ipc/handlers/*). Local FS utilities (paths.ts). No multi-tenancy.\par
+After: Next.js 14 App Router + React 18; API routes under src/app/api; server-only logic explicit; multi-tenant ready.\par
+Changes Made: IPC handlers replaced by HTTP methods (e.g. chat:send -> POST /api/chat/send). Removed Electron deps; added next, drizzle-orm, socket.io.\par
+Rationale: Browser access, horizontal scale, simplified delivery.\par
+Implementation: Old: ipcMain.handle('models:list', ...) New: GET /api/ai/models/available.\par
+Links: AI Models guide.\par
+\par
+\b 2. Communication Architecture\b0\par
+Component / Area: Transport\par
+Before: IPC synchronous channels; implicit trust.\par
+After: REST + Socket.IO; project rooms project:{id}.\par
+Changes Made: Added socket-server.ts; useCollaboration hook; presence events; removed unstable real-time file broadcast.\par
+Rationale: Standards-based, cloud-scalable, decoupled client/server.\par
+Implementation: Stream responses via fetch + ReadableStream; auth validated with getServerSession.\par
+Links: Chatting guide.\par
+\par
+\b 3. Database & Storage\b0\par
+Component / Area: Persistence\par
+Before: local SQLite (better-sqlite3); raw filesystem; no Redis.\par
+After: PostgreSQL + Drizzle ORM; Redis for cache/session; Docker volume for projects.\par
+Changes Made: Added users.role, projects_users join; replaced path-based access; added drizzle migrations.\par
+Rationale: ACID, concurrency, central governance.\par
+Implementation: DATABASE_URL env; volume isolation.\par
+Links: Versioning guide.\par
+\par
+\b 4. Authentication & RBAC\b0\par
+Component / Area: Identity\par
+Before: implicit local user; no roles; plaintext settings.\par
+After: NextAuth credentials; JWT sessions; roles: Owner/Editor/Viewer.\par
+Changes Made: authOptions in auth.ts; added role column; session callbacks.\par
+Rationale: Multi-tenant isolation, least privilege.\par
+Implementation: session.user.role injection; 30-day maxAge.\par
+Links: Security Review guide.\par
+\par
+\b 5. AI Model Integration\b0\par
+Component / Area: Provider abstraction\par
+Before: IPC handlers for local (Ollama/LMStudio) and cloud; no encryption.\par
+After: AIProviderFactory; /api/ai/models/available; AES-256-GCM encrypted keys.\par
+Changes Made: Removed local listing IPC; added encryption.ts.\par
+Rationale: Secure multi-provider integration; protect secrets.\par
+Implementation: encrypt(apiKeyPlain) before persistence.\par
+Links: AI Models guide.\par
+\par
+\b 6. Collaboration & Real-Time Sync\b0\par
+Component / Area: Presence\par
+Before: Single-user only.\par
+After: Socket.IO presence (join-project, presence-update); avatars; file sync deferred (rolled back).\par
+Changes Made: Added socket-server.ts; dedupe presence by userId; removed file-saved broadcast due to instability.\par
+Rationale: Awareness first; stability over premature CRDT.\par
+Implementation: Map<projectId, Map<userId, presence>>; event emissions.\par
+Links: Chatting guide.\par
+\par
+\b 7. Preview Server & Container Management\b0\par
+Component / Area: Runtime sandbox\par
+Before: Local browser preview; direct FS.\par
+After: Port range 8081–8099 inside Docker; isolated network.\par
+Changes Made: docker-compose port mapping; reserved preview layer.\par
+Rationale: Consistent ephemeral previews; isolation.\par
+Implementation: Future: GET /api/preview/{projectId}.\par
+Links: Previewing guide.\par
+\par
+\b 8. Versioning & File Management\b0\par
+Component / Area: Source control\par
+Before: isomorphic-git via IPC; ad-hoc file ops; no multi-user audit.\par
+After: API CRUD for files; planned commit snapshots; diff lib integration.\par
+Changes Made: File endpoints; metadata in DB; removed direct FS scanning.\par
+Rationale: Auditability, rollback, collaboration safety.\par
+Implementation: PUT /api/projects/{id}/files/{fileId}.\par
+Links: Versioning guide.\par
+\par
+\b 9. Import / Export Workflows\b0\par
+Component / Area: Project ingestion\par
+Before: Manual local copying.\par
+After: Planned REST endpoints for tar/zip import/export with validation.\par
+Changes Made: Conceptual design only; constraints around root boundary.\par
+Rationale: Secure controlled ingestion.\par
+Implementation: Future streaming extraction with size/mime guards.\par
+Links: Importing guide.\par
+\par
+\b 10. Debugging & Observability\b0\par
+Component / Area: Diagnostics\par
+Before: IPC debug_handlers with OS-level probes.\par
+After: Container logs; planned /api/debug/health; Redis counters (future).\par
+Changes Made: Removed privileged OS probes; standardized server logging.\par
+Rationale: Cloud visibility without host compromise.\par
+Implementation: Restrict debug endpoints by role=owner.\par
+Links: Debugging guide.\par
+\par
+\b 11. Mobile & Responsive Design\b0\par
+Component / Area: UI responsiveness\par
+Before: Desktop window layout; static sizing.\par
+After: Responsive flex/grid; collapsible panes; mobile-friendly Radix components.\par
+Changes Made: Removed Electron window assumptions; added CSS breakpoints.\par
+Rationale: Universal access (review on mobile).\par
+Implementation: @media rules to hide sidebars <900px.\par
+Links: Mobile guide.\par
+\par
+\b 12. Build & Deployment\b0\par
+Component / Area: Packaging\par
+Before: Electron Forge packages (.dmg/.exe); auto-updater.\par
+After: next build -> Docker image; docker-compose orchestrates app/db/redis.\par
+Changes Made: Added Dockerfile & compose; removed Electron build scripts.\par
+Rationale: Repeatable infra & scaling.\par
+Implementation: Multi-stage build for slimmer runtime.\par
+Links: Previewing guide.\par
+\par
+\b 13. Security Review (Critical)\b0\par
+Component / Area: Security posture\par
+Before: Implicit trust; plaintext keys; unlimited FS access; no RBAC; local-only risk profile.\par
+After: NextAuth JWT; RBAC roles; AES-256-GCM key encryption; Docker network isolation; project volume boundary; session strategy=jwt; planned audit trails.\par
+Changes Made: auth.ts (jwt/session callbacks); encryption.ts; users.role; presence dedupe; env secrets: NEXTAUTH_SECRET, ENCRYPTION_KEY.\par
+Rationale: Multi-tenant risk reduction; compliance readiness; constrained blast radius.\par
+Implementation:\par
+\tab Auth callback injects user.id + role.\par
+\tab Encryption: salt:iv:authTag:cipher layout.\par
+\tab Role gating conceptual middleware: ProjectAccessMiddleware.checkRole(projectId,['owner','editor']).\par
+\tab Breach containment: no plaintext keys; rotate ENCRYPTION_KEY; isolate project data volume.\par
+Links: Security Review guide; AI Models guide.\par
+\par
+\b 14. Class & Module Organization\b0\par
+Component / Area: Structure\par
+Before: ipc/handlers/*, main.ts orchestrates; path utilities for local FS.\par
+After: API route modules; lib utilities (auth, encryption, db).\par
+Changes Made: Removed registerIpcHandlers; added route-level GET/POST exports.\par
+Rationale: Separation of concerns, testability, portability.\par
+Implementation: export async function GET(request) patterns.\par
+Links: Debugging guide.\par
+\par
+\b 15. Configuration & Environment Management\b0\par
+Component / Area: Runtime config\par
+Before: .env + implicit path fallbacks; scattered logic.\par
+After: Central docker-compose env injection; strict secret requirements.\par
+Changes Made: Added mandatory ENCRYPTION_KEY length validation; explicit DATABASE_URL, REDIS_URL.\par
+Rationale: Predictable deployment & rotation.\par
+Implementation: Compose environment block, no secrets baked into image.\par
+Links: Security Review guide.\par
+\par
+\b 16. Trade-offs & Rationale Summary\b0\par
+Component / Area: Strategic assessment\par
+Trade-offs: Lost local model immediacy; added auth complexity; network latency vs IPC; deferred CRDT sync.\par
+Benefits: Collaboration; secure multi-tenancy; scalable provider integration; audit potential.\par
+Future: CRDT (Yjs), local model sandbox reintroduction, audit logging, rate limiting, row-level policies.\par
+Links: Versioning guide; Importing guide.\par
+\par
+\b Executive Summary\b0\par
+Dyad evolves from a trusted local assistant to a collaborative, secure, cloud-ready AI development platform. Key wins: RBAC, encrypted secrets, container isolation, standardized API surface.\par
+\par
+\b Cross-Section Consistency\b0\par
+Roles (Owner/Editor/Viewer); AES-256-GCM encryption; room naming project:{id}; getServerSession for auth; project volume boundary enforced.\par
+\par
+}\par
+}

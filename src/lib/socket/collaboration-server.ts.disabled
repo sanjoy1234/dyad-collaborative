@@ -1,0 +1,338 @@
+import { Server as SocketIOServer } from 'socket.io';
+import { Server as HTTPServer } from 'http';
+import { db } from '@/lib/db';
+import { activeSessions, projectFiles, operationsLog, activityLog } from '@/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
+import { Operation, CursorPosition } from '@/types';
+import { transformOperation } from './ot-engine';
+
+export interface SocketUser {
+  userId: string;
+  userName: string;
+  projectId: string;
+  socketId: string;
+}
+
+export class CollaborationServer {
+  private io: SocketIOServer;
+  private connectedUsers: Map<string, SocketUser> = new Map();
+
+  constructor(httpServer: HTTPServer) {
+    this.io = new SocketIOServer(httpServer, {
+      cors: {
+        origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        methods: ['GET', 'POST'],
+        credentials: true,
+      },
+      path: '/api/socket',
+    });
+
+    this.setupEventHandlers();
+  }
+
+  private setupEventHandlers() {
+    this.io.on('connection', (socket) => {
+      console.log(`Client connected: ${socket.id}`);
+
+      // Join project room
+      socket.on('join-project', async (data: { userId: string; userName: string; projectId: string }) => {
+        try {
+          const { userId, userName, projectId } = data;
+
+          // Store user info
+          this.connectedUsers.set(socket.id, {
+            userId,
+            userName,
+            projectId,
+            socketId: socket.id,
+          });
+
+          // Join project room
+          socket.join(`project:${projectId}`);
+
+          // Create session in database
+          await db.insert(activeSessions).values({
+            user_id: userId,
+            project_id: projectId,
+            socket_id: socket.id,
+            connected_at: new Date(),
+            last_heartbeat: new Date(),
+          });
+
+          // Log activity
+          await db.insert(activityLog).values({
+            project_id: projectId,
+            user_id: userId,
+            activity_type: 'user_joined',
+            metadata: { userName, socketId: socket.id },
+          });
+
+          // Broadcast to other users
+          socket.to(`project:${projectId}`).emit('user-joined', {
+            userId,
+            userName,
+            socketId: socket.id,
+          });
+
+          // Send current active users
+          const activeUsers = await db
+            .select()
+            .from(activeSessions)
+            .where(eq(activeSessions.project_id, projectId));
+
+          socket.emit('active-users', activeUsers);
+
+          console.log(`User ${userName} joined project ${projectId}`);
+        } catch (error) {
+          console.error('Error in join-project:', error);
+          socket.emit('error', { message: 'Failed to join project' });
+        }
+      });
+
+      // Leave project room
+      socket.on('leave-project', async (data: { projectId: string }) => {
+        await this.handleDisconnect(socket, data.projectId);
+      });
+
+      // Open file
+      socket.on('open-file', async (data: { fileId: string; projectId: string }) => {
+        try {
+          const user = this.connectedUsers.get(socket.id);
+          if (!user) return;
+
+          // Update session with active file
+          await db
+            .update(activeSessions)
+            .set({ active_file: data.fileId })
+            .where(eq(activeSessions.socket_id, socket.id));
+
+          // Broadcast to project
+          socket.to(`project:${data.projectId}`).emit('file-opened', {
+            userId: user.userId,
+            userName: user.userName,
+            fileId: data.fileId,
+          });
+        } catch (error) {
+          console.error('Error in open-file:', error);
+        }
+      });
+
+      // Close file
+      socket.on('close-file', async (data: { fileId: string; projectId: string }) => {
+        try {
+          const user = this.connectedUsers.get(socket.id);
+          if (!user) return;
+
+          // Clear active file from session
+          await db
+            .update(activeSessions)
+            .set({ active_file: null })
+            .where(eq(activeSessions.socket_id, socket.id));
+
+          // Broadcast to project
+          socket.to(`project:${data.projectId}`).emit('file-closed', {
+            userId: user.userId,
+            fileId: data.fileId,
+          });
+        } catch (error) {
+          console.error('Error in close-file:', error);
+        }
+      });
+
+      // Handle operations (typing)
+      socket.on('operation', async (data: { operation: Operation; projectId: string }) => {
+        try {
+          const user = this.connectedUsers.get(socket.id);
+          if (!user) return;
+
+          const { operation, projectId } = data;
+
+          // Get current file version
+          const file = await db
+            .select()
+            .from(projectFiles)
+            .where(eq(projectFiles.id, operation.fileId))
+            .limit(1);
+
+          if (!file || file.length === 0) {
+            socket.emit('error', { message: 'File not found' });
+            return;
+          }
+
+          // Transform operation against pending operations
+          const pendingOps = await db
+            .select()
+            .from(operationsLog)
+            .where(
+              and(
+                eq(operationsLog.file_id, operation.fileId),
+                eq(operationsLog.version_after, file[0].version)
+              )
+            );
+
+          let transformedOp = operation;
+          for (const pendingOp of pendingOps) {
+            transformedOp = transformOperation(transformedOp, {
+              id: pendingOp.id,
+              type: pendingOp.operation_type as 'insert' | 'delete' | 'replace',
+              position: pendingOp.position,
+              content: pendingOp.content || undefined,
+              length: pendingOp.length || undefined,
+              userId: pendingOp.user_id,
+              fileId: pendingOp.file_id,
+              timestamp: new Date(pendingOp.created_at).getTime(),
+              version: pendingOp.version_after,
+            });
+          }
+
+          // Apply operation to file content
+          let newContent = file[0].content;
+          const { position, content, length } = transformedOp;
+
+          if (transformedOp.type === 'insert' && content) {
+            newContent = newContent.slice(0, position) + content + newContent.slice(position);
+          } else if (transformedOp.type === 'delete' && length) {
+            newContent = newContent.slice(0, position) + newContent.slice(position + length);
+          } else if (transformedOp.type === 'replace' && content && length) {
+            newContent = newContent.slice(0, position) + content + newContent.slice(position + length);
+          }
+
+          // Update file
+          const newVersion = file[0].version + 1;
+          await db
+            .update(projectFiles)
+            .set({
+              content: newContent,
+              version: newVersion,
+              updated_at: new Date(),
+            })
+            .where(eq(projectFiles.id, operation.fileId));
+
+          // Log operation
+          await db.insert(operationsLog).values({
+            project_id: projectId,
+            file_id: operation.fileId,
+            user_id: user.userId,
+            operation_type: transformedOp.type,
+            position: transformedOp.position,
+            content: transformedOp.content,
+            length: transformedOp.length,
+            version_before: file[0].version,
+            version_after: newVersion,
+          });
+
+          // Broadcast operation to other users
+          socket.to(`project:${projectId}`).emit('operation', {
+            operation: { ...transformedOp, version: newVersion },
+            userId: user.userId,
+            userName: user.userName,
+          });
+
+          // Acknowledge to sender
+          socket.emit('operation-ack', {
+            operationId: operation.id,
+            version: newVersion,
+          });
+        } catch (error) {
+          console.error('Error in operation:', error);
+          socket.emit('error', { message: 'Failed to apply operation' });
+        }
+      });
+
+      // Cursor movement
+      socket.on('cursor-move', async (data: { fileId: string; position: CursorPosition; projectId: string }) => {
+        try {
+          const user = this.connectedUsers.get(socket.id);
+          if (!user) return;
+
+          // Update session with cursor position
+          await db
+            .update(activeSessions)
+            .set({ cursor_position: data.position as any })
+            .where(eq(activeSessions.socket_id, socket.id));
+
+          // Broadcast to project
+          socket.to(`project:${data.projectId}`).emit('cursor-move', {
+            userId: user.userId,
+            userName: user.userName,
+            fileId: data.fileId,
+            position: data.position,
+          });
+        } catch (error) {
+          console.error('Error in cursor-move:', error);
+        }
+      });
+
+      // Heartbeat
+      socket.on('heartbeat', async () => {
+        try {
+          await db
+            .update(activeSessions)
+            .set({ last_heartbeat: new Date() })
+            .where(eq(activeSessions.socket_id, socket.id));
+        } catch (error) {
+          console.error('Error in heartbeat:', error);
+        }
+      });
+
+      // Disconnect
+      socket.on('disconnect', async () => {
+        await this.handleDisconnect(socket);
+      });
+    });
+  }
+
+  private async handleDisconnect(socket: any, projectId?: string) {
+    try {
+      const user = this.connectedUsers.get(socket.id);
+      if (!user) return;
+
+      const targetProjectId = projectId || user.projectId;
+
+      // Remove from room
+      socket.leave(`project:${targetProjectId}`);
+
+      // Delete session from database
+      await db.delete(activeSessions).where(eq(activeSessions.socket_id, socket.id));
+
+      // Log activity
+      await db.insert(activityLog).values({
+        project_id: targetProjectId,
+        user_id: user.userId,
+        activity_type: 'user_left',
+        metadata: { userName: user.userName },
+      });
+
+      // Broadcast to other users
+      socket.to(`project:${targetProjectId}`).emit('user-left', {
+        userId: user.userId,
+        socketId: socket.id,
+      });
+
+      // Remove from connected users
+      this.connectedUsers.delete(socket.id);
+
+      console.log(`User ${user.userName} left project ${targetProjectId}`);
+    } catch (error) {
+      console.error('Error in handleDisconnect:', error);
+    }
+  }
+
+  public getIO(): SocketIOServer {
+    return this.io;
+  }
+}
+
+// Export singleton instance
+let collaborationServer: CollaborationServer | null = null;
+
+export const initCollaborationServer = (httpServer: HTTPServer): CollaborationServer => {
+  if (!collaborationServer) {
+    collaborationServer = new CollaborationServer(httpServer);
+  }
+  return collaborationServer;
+};
+
+export const getCollaborationServer = (): CollaborationServer | null => {
+  return collaborationServer;
+};

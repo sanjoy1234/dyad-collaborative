@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dyad Editor UI Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f3f4f6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 30px;
+        }
+
+        .test-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 6px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .test-section h2 {
+            color: #1f2937;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .test-step {
+            margin: 15px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .test-step strong {
+            color: #3b82f6;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .expected {
+            background: #dcfce7;
+            border-left: 3px solid #16a34a;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+
+        .expected-title {
+            font-weight: 600;
+            color: #16a34a;
+            margin-bottom: 5px;
+        }
+
+        .warning {
+            background: #fef3c7;
+            border-left: 3px solid #f59e0b;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+
+        .warning-title {
+            font-weight: 600;
+            color: #f59e0b;
+            margin-bottom: 5px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            margin-right: 10px;
+            margin-top: 10px;
+            cursor: pointer;
+            border: none;
+            font-size: 14px;
+        }
+
+        .button:hover {
+            background: #2563eb;
+        }
+
+        .button-secondary {
+            background: #6b7280;
+        }
+
+        .button-secondary:hover {
+            background: #4b5563;
+        }
+
+        .status-good {
+            color: #16a34a;
+            font-weight: 600;
+        }
+
+        .status-bad {
+            color: #dc2626;
+            font-weight: 600;
+        }
+
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+
+        .checklist li {
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .checklist li::before {
+            content: "☐ ";
+            font-size: 18px;
+            margin-right: 8px;
+            color: #6b7280;
+        }
+
+        code {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .screenshot {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9fafb;
+            border: 2px dashed #d1d5db;
+            border-radius: 6px;
+            text-align: center;
+            color: #6b7280;
+        }
+
+        .panel-diagram {
+            display: grid;
+            grid-template-columns: 200px 1fr 250px;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+
+        .panel {
+            padding: 15px;
+            border-radius: 4px;
+            border: 2px solid #d1d5db;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .panel-left {
+            background: #dbeafe;
+            border-color: #3b82f6;
+        }
+
+        .panel-center {
+            background: #fef3c7;
+            border-color: #f59e0b;
+        }
+
+        .panel-right {
+            background: #dcfce7;
+            border-color: #16a34a;
+        }
+
+        .important-box {
+            background: #fef2f2;
+            border: 2px solid #dc2626;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .important-box h3 {
+            color: #dc2626;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Dyad AI Editor - Complete UI Test Guide</h1>
+        <p class="subtitle">Follow these steps to verify your AI vibe coding interface is working correctly</p>
+
+        <!-- CRITICAL ISSUE -->
+        <div class="important-box">
+            <h3>⚠️ CRITICAL: Where is the AI Chat Interface?</h3>
+            <p>If you're seeing the dashboard but <strong>NO WAY TO TYPE PROMPTS</strong>, you need to:</p>
+            <ol style="margin-top: 10px; padding-left: 20px;">
+                <li><strong>Click on a PROJECT CARD</strong> from the dashboard</li>
+                <li>You should be redirected to <code>/editor/{projectId}</code></li>
+                <li>The 3-panel editor will load with the AI Chat on the RIGHT side</li>
+            </ol>
+        </div>
+
+        <!-- Test Section 1 -->
+        <div class="test-section">
+            <h2>📋 Test 1: Access the Dashboard</h2>
+            
+            <div class="test-step">
+                <strong>Step 1.1: Open Application</strong>
+                <a href="http://localhost:3000" target="_blank" class="button">Open Dyad App</a>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    You should see the login page if not logged in, or the dashboard if already logged in
+                </div>
+            </div>
+
+            <div class="test-step">
+                <strong>Step 1.2: Login</strong>
+                <p>Use credentials: <code>dev1@test.com</code> / <code>password</code></p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    Redirected to Dashboard showing "Your Projects" with project cards
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Section 2 -->
+        <div class="test-section">
+            <h2>🎨 Test 2: Open the 3-Panel AI Editor</h2>
+            
+            <div class="test-step">
+                <strong>Step 2.1: Click on ANY Project Card</strong>
+                <p>On the dashboard, click on "Collaborative Demo Project" or any other project</p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>URL changes to <code>/editor/{long-uuid}</code></li>
+                        <li>3-panel layout appears</li>
+                        <li>Page title shows project name</li>
+                    </ul>
+                </div>
+                <div class="warning">
+                    <div class="warning-title">⚠️ If Nothing Happens:</div>
+                    Check browser console (F12) for JavaScript errors
+                </div>
+            </div>
+
+            <div class="test-step">
+                <strong>Step 2.2: Verify 3-Panel Layout</strong>
+                <div class="panel-diagram">
+                    <div class="panel panel-left">
+                        📁 LEFT<br>File Explorer<br>320px
+                    </div>
+                    <div class="panel panel-center">
+                        📋 CENTER<br>Preview/Code/Diff<br>Flexible
+                    </div>
+                    <div class="panel panel-right">
+                        💬 RIGHT<br>AI Chat<br>384px<br><strong>← TYPE HERE!</strong>
+                    </div>
+                </div>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    <p><strong>RIGHT PANEL should contain:</strong></p>
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>Header: "💬 AI Assistant"</li>
+                        <li>Model badge: "Model: gpt-4o" (or blank if not configured)</li>
+                        <li>Button: "Configure Model"</li>
+                        <li>Large text area: "Type your prompt..."</li>
+                        <li>Send button below text area</li>
+                        <li>Chat history area above</li>
+                        <li>Selected files count at bottom</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Section 3 -->
+        <div class="test-section">
+            <h2>⚙️ Test 3: Configure AI Model</h2>
+            
+            <div class="test-step">
+                <strong>Step 3.1: Click "Configure Model" Button</strong>
+                <p>Button is in the header (top right) OR in the right panel</p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    Modal dialog opens with title "Configure AI Model"
+                </div>
+            </div>
+
+            <div class="test-step">
+                <strong>Step 3.2: Enter API Key</strong>
+                <p>Select OpenAI tab, paste your API key: <code>sk-proj-...</code></p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>API key field accepts text (shows dots for security)</li>
+                        <li>Model dropdown shows: GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo</li>
+                        <li>"Test Connection" button is clickable</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="test-step">
+                <strong>Step 3.3: Test and Save</strong>
+                <p>Click "Test Connection", then "Save Configuration"</p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>Test shows green checkmark ✅</li>
+                        <li>Modal closes after save</li>
+                        <li>Model badge in chat updates to "gpt-4o"</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Section 4 -->
+        <div class="test-section">
+            <h2>🤖 Test 4: Generate Code with AI</h2>
+            
+            <div class="test-step">
+                <strong>Step 4.1: Type a Simple Prompt</strong>
+                <p>In the RIGHT PANEL text area, type:</p>
+                <code style="display: block; margin: 10px 0; padding: 10px;">Create a Button component in src/components/Button.tsx</code>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    Text appears in the text area as you type
+                </div>
+            </div>
+
+            <div class="test-step">
+                <strong>Step 4.2: Send Prompt</strong>
+                <p>Press Enter or click "Send" button</p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>Message appears in chat history</li>
+                        <li>Status shows "Generating..." with spinner</li>
+                        <li>After 5-15 seconds, response appears</li>
+                        <li>Center panel switches to "Diff" tab</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="test-step">
+                <strong>Step 4.3: Review Diff</strong>
+                <p>Check the center panel's Diff tab</p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>File name: "src/components/Button.tsx"</li>
+                        <li>Green lines with "+" showing new code</li>
+                        <li>Statistics: "+42 additions" or similar</li>
+                        <li>Buttons: "Approve & Apply" and "Reject"</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="test-step">
+                <strong>Step 4.4: Apply Changes</strong>
+                <p>Click "Approve & Apply" button</p>
+                <div class="expected">
+                    <div class="expected-title">✅ Expected:</div>
+                    <ul style="margin-top: 5px; padding-left: 20px;">
+                        <li>Success message appears</li>
+                        <li>Chat message status → "Applied" (green badge)</li>
+                        <li>File tree refreshes</li>
+                        <li>"Button.tsx" appears in file explorer</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Checklist -->
+        <div class="test-section">
+            <h2>✅ Complete Functionality Checklist</h2>
+            <ul class="checklist">
+                <li>Dashboard displays project cards</li>
+                <li>Clicking project opens editor at /editor/{id}</li>
+                <li>Left panel shows file tree</li>
+                <li>Center panel has Preview/Code/Diff tabs</li>
+                <li><strong>Right panel shows AI Chat interface</strong></li>
+                <li>Right panel has "Type your prompt..." text area</li>
+                <li>Right panel has "Send" button</li>
+                <li>Configure Model button opens modal</li>
+                <li>Modal allows API key entry</li>
+                <li>Model selection dropdown works</li>
+                <li>Test connection validates API key</li>
+                <li>Save stores configuration</li>
+                <li>Typing prompt in text area works</li>
+                <li>Sending prompt triggers AI generation</li>
+                <li>Diff appears in center panel</li>
+                <li>Approve button applies changes</li>
+                <li>File tree updates with new files</li>
+            </ul>
+        </div>
+
+        <!-- Troubleshooting -->
+        <div class="test-section">
+            <h2>🔧 Troubleshooting</h2>
+            
+            <div class="test-step">
+                <strong>Problem: Can't find where to type prompts</strong>
+                <p><span class="status-good">Solution:</span> Make sure you've clicked on a project card and are on the <code>/editor/{id}</code> page, not the dashboard</p>
+            </div>
+
+            <div class="test-step">
+                <strong>Problem: Right panel is missing</strong>
+                <p><span class="status-good">Solution:</span> Look for a collapse/expand button (arrow icon). The panel might be collapsed.</p>
+            </div>
+
+            <div class="test-step">
+                <strong>Problem: "Configure your model first" error</strong>
+                <p><span class="status-good">Solution:</span> Click "Configure Model" and set up your API key</p>
+            </div>
+
+            <div class="test-step">
+                <strong>Problem: No response after sending prompt</strong>
+                <p><span class="status-good">Solution:</span> Check API key is valid, has credits, and internet connection is working</p>
+            </div>
+
+            <div class="test-step">
+                <strong>Problem: Editor page shows blank screen</strong>
+                <p><span class="status-good">Solution:</span> 
+                    <ol style="margin-top: 5px; padding-left: 20px;">
+                        <li>Open browser console (F12)</li>
+                        <li>Check for JavaScript errors</li>
+                        <li>Refresh page (Ctrl+R / Cmd+R)</li>
+                        <li>Check Docker logs: <code>docker logs dyad-collaborative-app-1</code></li>
+                    </ol>
+                </p>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div style="margin-top: 40px; padding: 20px; background: #f9fafb; border-radius: 6px;">
+            <h3 style="margin-bottom: 15px;">🔗 Quick Links</h3>
+            <a href="http://localhost:3000" target="_blank" class="button">Open App</a>
+            <a href="http://localhost:3000/dashboard" target="_blank" class="button">Dashboard</a>
+            <a href="http://localhost:3000/editor/660e8400-e29b-41d4-a716-446655440001" target="_blank" class="button">Demo Project Editor</a>
+            <a href="/docs/AI_VIBE_CODING_GUIDE.md" class="button button-secondary">Full User Guide</a>
+        </div>
+
+        <!-- Footer -->
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280;">
+            <p><strong>Dyad Collaborative - AI Vibe Coding</strong></p>
+            <p style="margin-top: 5px;">Version 1.0.0 | November 5, 2025</p>
+            <p style="margin-top: 10px; font-size: 14px;">
+                For detailed instructions, see: <code>docs/AI_VIBE_CODING_GUIDE.md</code>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
